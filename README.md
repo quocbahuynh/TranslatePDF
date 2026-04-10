@@ -37,7 +37,7 @@ source venv/bin/activate
 # venv\Scripts\activate
 
 # Install fundamental dependencies
-pip install PySide6 PyMuPDF deep-translator argostranslate
+pip install -r requirements.txt
 ```
 
 ### 3. Install Offline Translation Models
