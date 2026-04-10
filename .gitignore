@@ -1,0 +1,67 @@
+# =========================
+# 🐍 Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+venv/
+.env/
+.env.*
+
+# =========================
+# 📦 Build / Distribution
+# =========================
+build/
+dist/
+*.spec
+
+# PyInstaller
+*.exe
+*.app
+*.dmg
+
+# =========================
+# 🧾 Logs
+# =========================
+*.log
+
+# =========================
+# 🖥️ OS Files
+# =========================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# =========================
+# 🧪 Editor / IDE
+# =========================
+
+# VS Code
+.vscode/
+
+# PyCharm
+.idea/
+
+# =========================
+# 📄 Your App Files
+# =========================
+
+# PDFs (input/output)
+*.pdf
+
+# Fonts (optional - keep if needed)
+# NotoSans-Regular.ttf
+
+# =========================
+# 🔐 Secrets
+# =========================
+.env
