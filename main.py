@@ -4,10 +4,20 @@ import unicodedata
 import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
+import sys
+
+def get_resource_path(relative_path):
+    """ Get absolute path to resource, works for dev and for PyInstaller """
+    try:
+        base_path = sys._MEIPASS
+    except Exception:
+        base_path = os.path.abspath(".")
+    return os.path.join(base_path, relative_path)
+
 # Configuration
 INPUT = "input.pdf"
 OUTPUT = "output.pdf"
-FONT_PATH = "NotoSans-Regular.ttf"
+FONT_PATH = get_resource_path("NotoSans-Regular.ttf")
 
 # ========================
 # 🚀 ADD CACHE (TỐI ƯU)
@@ -261,4 +271,5 @@ def translate_pdf(input_path, output_path, progress_callback=None, cancel_callba
     return True
 
 if __name__ == "__main__":
-    translate_pdf(INPUT, OUTPUT)
+    from ui import start_app
+    start_app()

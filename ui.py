@@ -335,7 +335,11 @@ class App(QWidget):
 
 
 # ========================
-app = QApplication(sys.argv)
-window = App()
-window.show()
-sys.exit(app.exec())
+def start_app():
+    app = QApplication(sys.argv)
+    window = App()
+    window.show()
+    sys.exit(app.exec())
+
+if __name__ == "__main__":
+    start_app()
