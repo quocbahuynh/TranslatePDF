@@ -124,128 +124,141 @@ def parallel_translate(texts, max_workers=4):
     return results
 
 
-doc = fitz.open(INPUT)
-new_doc = fitz.open()
+def translate_pdf(input_path, output_path, progress_callback=None, cancel_callback=None):
+    doc = fitz.open(input_path)
+    new_doc = fitz.open()
 
-# 👉 LOAD FONT AN TOÀN
-has_custom_font = False
-if os.path.exists(FONT_PATH):
-    has_custom_font = True
-else:
-    print("⚠️ Font not found, fallback to Helvetica")
+    # 👉 LOAD FONT AN TOÀN
+    has_custom_font = False
+    if os.path.exists(FONT_PATH):
+        has_custom_font = True
+    else:
+        print("⚠️ Font not found, fallback to Helvetica")
 
-total_pages = len(doc)
+    total_pages = len(doc)
 
 
-for page in doc:
-    new_page = new_doc.new_page(
-        width=page.rect.width,
-        height=page.rect.height
-    )
+    for i_page, page in enumerate(doc):
+        if cancel_callback and cancel_callback():
+            doc.close()
+            new_doc.close()
+            return False
 
-    # 👉 COPY FULL PAGE (GIỮ 100% LAYOUT + IMAGE)
-    new_page.show_pdf_page(new_page.rect, doc, page.number)
+        new_page = new_doc.new_page(
+            width=page.rect.width,
+            height=page.rect.height
+        )
 
-    data = page.get_text("dict")
+        # 👉 COPY FULL PAGE (GIỮ 100% LAYOUT + IMAGE)
+        new_page.show_pdf_page(new_page.rect, doc, page.number)
 
-    # ========================
-    # 🚀 COLLECT + DEDUP TEXT
-    # ========================
-    all_texts = []
+        data = page.get_text("dict")
 
-    for block in data["blocks"]:
-        if block["type"] != 0:
-            continue
-        for line in block["lines"]:
-            for span in line["spans"]:
-                txt = span["text"]
-                if txt.strip():
-                    all_texts.append(txt)
+        # ========================
+        # 🚀 COLLECT + DEDUP TEXT
+        # ========================
+        all_texts = []
 
-    unique_texts = list(set(all_texts))
+        for block in data["blocks"]:
+            if block["type"] != 0:
+                continue
+            for line in block["lines"]:
+                for span in line["spans"]:
+                    txt = span["text"]
+                    if txt.strip():
+                        all_texts.append(txt)
 
-    # 👉 PARALLEL TRANSLATE
-    translated_map = parallel_translate(unique_texts)
+        unique_texts = list(set(all_texts))
 
-    # ========================
-    # 👉 STEP 1: ADD REDACTION
-    # ========================
-    for block in data["blocks"]:
-        if block["type"] != 0:
-            continue
+        # 👉 PARALLEL TRANSLATE
+        translated_map = parallel_translate(unique_texts)
 
-        for line in block["lines"]:
-            for span in line["spans"]:
+        # ========================
+        # 👉 STEP 1: ADD REDACTION
+        # ========================
+        for block in data["blocks"]:
+            if block["type"] != 0:
+                continue
 
-                original_text = span["text"]
-                if not original_text.strip():
-                    continue
+            for line in block["lines"]:
+                for span in line["spans"]:
 
-                rect = fitz.Rect(span["bbox"])
-                new_page.add_redact_annot(rect, fill=(1, 1, 1))
+                    original_text = span["text"]
+                    if not original_text.strip():
+                        continue
 
-    new_page.apply_redactions()
+                    rect = fitz.Rect(span["bbox"])
+                    new_page.add_redact_annot(rect, fill=(1, 1, 1))
 
-    # ========================
-    # 👉 STEP 2: DRAW TEXT
-    # ========================
-    for block in data["blocks"]:
-        if block["type"] != 0:
-            continue
+        new_page.apply_redactions()
 
-        for line in block["lines"]:
-            for span in line["spans"]:
+        # ========================
+        # 👉 STEP 2: DRAW TEXT
+        # ========================
+        for block in data["blocks"]:
+            if block["type"] != 0:
+                continue
 
-                original_text = span["text"]
-                if not original_text.strip():
-                    continue
+            for line in block["lines"]:
+                for span in line["spans"]:
 
-                translated = translated_map.get(original_text, original_text)
-                clean_text = unicodedata.normalize("NFC", str(translated))
+                    original_text = span["text"]
+                    if not original_text.strip():
+                        continue
 
-                bbox = span["bbox"]
-                font_size = span["size"]
+                    translated = translated_map.get(original_text, original_text)
+                    clean_text = unicodedata.normalize("NFC", str(translated))
 
-                # 👉 CHỌN FONT ĐỂ VẼ
-                draw_font = "helv"
-                if has_custom_font:
-                    draw_font = "vi"
-                    if "vi" not in new_page.get_fonts():
-                        new_page.insert_font("vi", FONT_PATH)
+                    bbox = span["bbox"]
+                    font_size = span["size"]
 
-                # 👉 AUTO FIT
-                while font_size > 5:
-                    text_width = fitz.get_text_length(
+                    # 👉 CHỌN FONT ĐỂ VẼ
+                    draw_font = "helv"
+                    if has_custom_font:
+                        draw_font = "vi"
+                        if "vi" not in new_page.get_fonts():
+                            new_page.insert_font("vi", FONT_PATH)
+
+                    # 👉 AUTO FIT
+                    while font_size > 5:
+                        text_width = fitz.get_text_length(
+                            clean_text,
+                            fontname="helv",
+                            fontsize=font_size
+                        )
+
+                        if text_width <= (bbox[2] - bbox[0]):
+                            break
+
+                        font_size -= 0.5
+
+                    # 👉 FIT TEXT BOX
+                    wrapped_lines, final_font_size = fit_text_to_box(
                         clean_text,
-                        fontname="helv",
-                        fontsize=font_size
+                        bbox,
+                        span["size"]
                     )
 
-                    if text_width <= (bbox[2] - bbox[0]):
-                        break
+                    x = bbox[0]
+                    y = bbox[3]
+                    line_height = final_font_size * 1.2
 
-                    font_size -= 0.5
+                    for i, text_line in enumerate(wrapped_lines):
+                        new_page.insert_text(
+                            (x, y + i * line_height),
+                            text_line,
+                            fontsize=final_font_size,
+                            fontname=draw_font,
+                            color=(0, 0, 0)
+                        )
+                        
+        if progress_callback:
+            progress_callback(i_page + 1, total_pages)
 
-                # 👉 FIT TEXT BOX
-                lines, final_font_size = fit_text_to_box(
-                    clean_text,
-                    bbox,
-                    span["size"]
-                )
+    new_doc.save(output_path)
+    doc.close()
+    new_doc.close()
+    return True
 
-                x = bbox[0]
-                y = bbox[3]
-                line_height = final_font_size * 1.2
-
-                for i, line in enumerate(lines):
-                    new_page.insert_text(
-                        (x, y + i * line_height),
-                        line,
-                        fontsize=final_font_size,
-                        fontname=draw_font,
-                        color=(0, 0, 0)
-                    )
-
-new_doc.save(OUTPUT)
-doc.close()
-new_doc.close()
+if __name__ == "__main__":
+    translate_pdf(INPUT, OUTPUT)

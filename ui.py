@@ -29,24 +29,29 @@ class Worker(QThread):
         self._is_running = False
 
     def run(self):
-        doc = fitz.open(self.input_file)
-        total = len(doc)
+        from main import translate_pdf
 
         self.status.emit("Processing...")
 
-        for i, page in enumerate(doc):
-            if not self._is_running:
-                self.status.emit("Cancelled")
-                return
-
-            import time
-            time.sleep(0.2)
-
-            percent = int((i + 1) / total * 100)
+        def update_progress(current, total):
+            percent = int(current / total * 100)
             self.progress.emit(percent)
-            self.status.emit(f"Page {i+1}/{total}")
+            self.status.emit(f"Page {current}/{total}")
 
-        self.status.emit("Done!")
+        def check_cancel():
+            return not self._is_running
+
+        success = translate_pdf(
+            self.input_file,
+            self.output_file,
+            progress_callback=update_progress,
+            cancel_callback=check_cancel
+        )
+
+        if success:
+            self.status.emit("Done!")
+        else:
+            self.status.emit("Cancelled")
 
 
 # ========================
@@ -285,7 +290,8 @@ class App(QWidget):
 
     # ========================
     def run_process(self):
-        self.output_file = "output.pdf"
+        base, ext = os.path.splitext(self.input_file)
+        self.output_file = f"{base}_translated.pdf"
 
         self.progress_bar.setValue(0)
         self.progress_bar.show()
